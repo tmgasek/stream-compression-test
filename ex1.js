@@ -4,11 +4,14 @@
 
 import path from "path";
 import fs from "fs";
-// import util from "util";
 import minimist from "minimist";
 import { fileURLToPath } from "url";
 import { Transform } from "stream";
 import zlib from "zlib";
+import { CAF } from "caf";
+
+// This needs to happen towards top of file.
+processFile = CAF(processFile);
 
 // Gets around ReferenceError: __dirname is not defined in ES module scope error.
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +29,9 @@ const args = minimist(process.argv.slice(2), {
 if (args.help) {
     printHelp();
 } else if (args.in || args._.includes("-")) {
-    processFile(process.stdin)
+    let tooLong = CAF.timeout(15, "** Took too long!");
+
+    processFile(tooLong, process.stdin)
         .then(() => {
             console.log("*** complete!");
         })
@@ -34,16 +39,21 @@ if (args.help) {
 } else if (args.file) {
     let filepath = path.join(BASE_PATH, args.file);
     let stream = fs.createReadStream(filepath);
-    processFile(stream).then(() => {
-        console.log("*** complete");
-    });
+
+    let tooLong = CAF.timeout(15, "** Took too long!");
+
+    processFile(tooLong, stream)
+        .then(() => {
+            console.log("*** complete");
+        })
+        .catch(error);
 } else {
     error("incorrect usage", true);
 }
 
 // ***************************
 
-async function processFile(inStream) {
+function* processFile(signal, inStream) {
     let outStream = inStream;
 
     if (args.uncompress) {
@@ -78,7 +88,13 @@ async function processFile(inStream) {
 
     outStream.pipe(targetStream);
 
-    await streamComplete(outStream);
+    signal.pr.catch(() => {
+        // timeout has happened.
+        outStream.unpipe(targetStream); // stop sending chunks of data
+        outStream.destroy(); // tells all other streams to stop piping
+    });
+
+    yield streamComplete(outStream);
 }
 
 function streamComplete(stream) {
