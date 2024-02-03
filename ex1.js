@@ -26,18 +26,24 @@ const args = minimist(process.argv.slice(2), {
 if (args.help) {
     printHelp();
 } else if (args.in || args._.includes("-")) {
-    processFile(process.stdin);
+    processFile(process.stdin)
+        .then(() => {
+            console.log("*** complete!");
+        })
+        .catch(error);
 } else if (args.file) {
     let filepath = path.join(BASE_PATH, args.file);
     let stream = fs.createReadStream(filepath);
-    processFile(stream);
+    processFile(stream).then(() => {
+        console.log("*** complete");
+    });
 } else {
     error("incorrect usage", true);
 }
 
 // ***************************
 
-function processFile(inStream) {
+async function processFile(inStream) {
     let outStream = inStream;
 
     if (args.uncompress) {
@@ -67,7 +73,20 @@ function processFile(inStream) {
         targetStream = fs.createWriteStream(OUTFILE);
     }
 
+    // we want to know when outStream fires "end" event, means that it has
+    // fully flushed itself to the target stream and we're done.
+
     outStream.pipe(targetStream);
+
+    await streamComplete(outStream);
+}
+
+function streamComplete(stream) {
+    return new Promise((res) => {
+        stream.on("end", () => {
+            res();
+        });
+    });
 }
 
 function error(msg, includeHelp = false) {
