@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "caf": "^15.0.1",
+    "express": "^4.18.2",
     "get-stdin": "^9.0.0",
     "minimist": "^1.2.8",
     "npm": "^10.4.0"
